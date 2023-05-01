@@ -4,8 +4,9 @@ quality metrics. The script takes a long-form dataframe, where for each
 bag in the cage (numbered 1-n) the depth, urchin density, mortality, 
 biofouling ranking, as well as the set of starting test diameters, ending test 
 diameters, ending gonad index percentage (calculation: gonad weight / 
-wet weight * 100), and starting/ending shell length. Reference the 
-attached example dataset .csv file.
+wet weight * 100), and starting/ending shell length. Each data type has an 
+associated string required for code function; Reference the attached example
+dataset .csv file for naming regimen.
 
 Prior to execution, ensure the repository is moved into your ~/R/ folder.
 If a different dataset will be used, either rename your dataset the same as
