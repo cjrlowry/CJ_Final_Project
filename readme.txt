@@ -7,8 +7,10 @@ diameters, ending gonad index percentage (calculation: gonad weight /
 wet weight * 100), and starting/ending shell length. Reference the 
 attached example dataset .csv file.
 
-Prior to execution, ensure the example_dataset folder is in your ~/R/ folder.
-Other files
+Prior to execution, ensure the repository is moved into your ~/R/ folder.
+If a different dataset will be used, either rename your dataset the same as
+the urchins_example_data.csv file and replace it within the repository, or
+change line 19 of the .Rmd file so that the file reads the correct location.
 
 The output of this file is an R Markdown file with a series of ANOVA
 tests between urchin density and various quality metrics such as GI%,

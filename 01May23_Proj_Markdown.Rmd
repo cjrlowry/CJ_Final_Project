@@ -15,8 +15,8 @@ library(dplyr)
 library(tidyr)
 library(ggplot2)
 
-#load data, data must be saved in home workspace, remove N/A gis
-urchins_raw <- read.csv("~/R/urchin_data/urchins_example_data.csv", na.strings = c("N/A", "NA"))  # location should be~/urchin_data/example_dataset/urchin_example_data.csv
+#load data, load entire file into the R workspace
+urchins_raw <- read.csv("~/R/CJ_Final_Project/urchins_example_data.csv", na.strings = c("N/A", "NA"))
 
 #convert non-NA gis to numerics
 urchins_raw[] <- apply(urchins_raw, 2, function(x) {
@@ -25,15 +25,15 @@ urchins_raw[] <- apply(urchins_raw, 2, function(x) {
 })
 
 #Testing
-urchins_cleaned <- urchins_raw
+urchins_cleaned <- urchins_raw # new cleaner dataset to alter
 #URCHIN DENSITY effect on BIOFOULING
 urchins_cleaned$urchin_density <- factor(urchins_cleaned$urchin_density) #urchin density control variable needs to be a factor
 urchins_cleaned$depth <- factor(urchins_cleaned$depth) #depth control variable needs to be a factor
-model_biofouling <- aov(biofouling_end_rank ~ urchin_density*depth, data = urchins_cleaned) #anova
+model_biofouling <- aov(biofouling_end_rank ~ urchin_density*depth, data = urchins_cleaned) #anova for both biofouling and depth
 #output results
-summary(model_biofouling) #summary, if we see significant results we continue:
+summary(model_biofouling) #summary; technically only if significant results are found we continue to post hoc analysis but for this we'll be conducting it for all of them
 tukey_biofouling <- TukeyHSD(model_biofouling) #post hoc analysis to identify which levels in particular are significant
-#save results
+#save results with significance marked
 tukey_summary_biofoul <- as.data.frame(tukey_biofouling$'urchin_density') #specify what results to save
 tukey_summary_biofoul$sig <- ifelse(tukey_summary_biofoul$'p adj' < 0.05, "*", " ") #add additional row that marks significant results
 tukey_summary_depth <- as.data.frame(tukey_biofouling$'depth') #same for depth, check if depth has influence
@@ -48,7 +48,6 @@ plot_biofouling <- ggplot(urchins_cleaned, aes(x = urchin_density, y = biofoulin
   scale_y_continuous(limits = c(0, max(urchins_cleaned$biofouling_end_rank) + 1)) +
   theme_classic()
 
-
 #plot depth
 plot_depth <- ggplot(urchins_cleaned, aes(x = depth, y = biofouling_end_rank)) +
   geom_violin(fill = "lightblue") + # violin plot
@@ -59,6 +58,7 @@ plot_depth <- ggplot(urchins_cleaned, aes(x = depth, y = biofouling_end_rank)) +
   theme_classic()
 
 #Urchin Density and Mortality
+#same as above
 model_mort <- aov(mortality ~ urchin_density, data = urchins_cleaned) 
 summary(model_mort) 
 tukey_mort <- TukeyHSD(model_mort) 
@@ -72,9 +72,6 @@ plot_mort <- ggplot(urchins_cleaned, aes(x = urchin_density, y = mortality)) +
   labs(title = "Urchin Density vs. Urchin Mortalities", x = "Urchin Density", y = "Mortalities") +
   scale_y_continuous(limits = c(0, max(urchins_cleaned$mortality) + 1)) +
   theme_classic()
-
-
-
 
 #URCHIN DENSITY effect on URCHIN QUALITY metrics
 #includes GI and change in TD
@@ -113,9 +110,6 @@ summary(model_td)
 tukey_td <- TukeyHSD(model_td)
 tukey_summary_td <- as.data.frame(tukey_td$'urchin_density')
 tukey_summary_td$sig <- ifelse(tukey_summary_td$'p adj' < 0.05, "*", " ")
-
-
-
 
 #plot for GI
 plot_gi <- ggplot(gi_data, aes(x = urchin_density, y = gi_values)) +
@@ -168,8 +162,6 @@ plot_slu <- ggplot(urchins_cleaned, aes(x = urchin_density, y = shell_length_dif
   scale_y_continuous(limits = c(0, max(urchins_cleaned$td_diff) + 1)) +
   theme_classic()
 
-
-
 #BIOFOULING effect on OYSTER QUALITY
 urchins_cleaned$biofouling_end_rank <- as.factor(urchins_cleaned$biofouling_end_rank)
 model_slb <- aov(shell_length_diff ~ biofouling_end_rank, data = urchins_cleaned)
@@ -187,13 +179,13 @@ plot_slb <- ggplot(urchins_cleaned, aes(x = biofouling_end_rank, y = shell_lengt
   labs(title = "Biofouling Rank vs. Change in Oyster Shell Length", x = "Biofouling Rank", y = "Change in Oyster Shell Length (mm)") +
   scale_y_continuous(limits = c(0, max(urchins_cleaned$shell_length_diff) + 1)) +
   theme_classic()
-
-
 ```
 
 ## Introduction
 
 This analysis requires a dataset in long form, arranged such that treatment cages are in rows and data collected for each row is found in the columns. Data collected includes: mortality, biofouling end rank, test diameter at start of experiment and test diameter at end of experiment, shell length at start of experiment and shell length at end of experiment, and GI%. This dataset assumes GI% calculations have already been performed on the raw data.
+
+## Methods
 
 In order to prove our assumptions that determine our decision to use an ANOVA test, we can check that our response variables have approximately similar variances using an F-test for equality of variances at P>0.05, where if P>0.05 we can assume the variances are similar.
 ```{r, echo=FALSE}
@@ -232,11 +224,19 @@ cor_test2 <- na.omit(cor_test2)
 cor(cor_test2$biofouling_end_rank, cor_test2$gi_values, method = c("kendall"))
 ```
 
-
-
 If correlations are found, this can be used to reinforce our understanding of how urchin presence/density influences oyster quality and urchin quality. We can focus on more specific variables with stronger effects. Non-correlation means ANOVAs should be performed on all variables.
 
-Here we can view the analysis of our data using one-way ANOVAs.
+## Analysis
+
+Here we can view the analysis of our data using one-way ANOVAs. Each section produces a violin plot of the data with standard error bars and median highlighted, as well as a summary of a tukey's honest significant differences post-hoc analysis with statistically significant differences highlighted. This analysis investigates the relationship between the independent variable urchin density and biofouling rank, mortality, test diameter, GI%, and oyster shell length. We also check the covariate for influence on biofouling, as well as an additional test between biofouling rank and oyster shell length where we assume biofouling rank to be an independent variable.
+
+Influence of cage depth on biofouling ranking
+```{r, echo=FALSE}
+plot(plot_depth)
+knitr::kable(tukey_summary_depth, format = "markdown")
+```
+This analysis checks the covariate depth for influence on biofouling ranking. For this example, there is no influence of cage depth on biofouling ranking and we can therefore safely assume that all the cages are functionally replicates of one another between depths (for a given urchin density); if we do see differences in biofouling ranking this flags the user to perform a deeper analysis between urchin density AND depth on the response variables. This would be performed using an ANCOVA test (Analysis of Covariance) using the lm() function.
+
 Influence of urchin density on biofouling rankings:
 ```{r, echo=FALSE}
 plot(plot_biofouling)
@@ -248,16 +248,6 @@ Influence of urchin density on mortality rate:
 plot(plot_mort)
 knitr::kable(tukey_mort, format = "markdown")
 ```
-
-
-
-Influence of cage depth on biofouling ranking
-```{r, echo=FALSE}
-plot(plot_depth)
-knitr::kable(tukey_summary_depth, format = "markdown")
-```
-This test is particularly important. Since there is no influence of cage depth on biofouling ranking we can safely assume that all the cages are functionally replicates of one another between depths (for a given urchin density); if we do see differences in biofouling ranking this would be a flag that we should perform a deeper analysis between urchin density AND depth on the response variables using an ANCOVA test (Analysis of Covariance) using the lm() function
-
 
 Influence of urchin density on urchin quality metric test diameter:
 ```{r, echo=FALSE}
@@ -283,13 +273,10 @@ plot(plot_slb)
 knitr::kable(tukey_summary_slb, format = "markdown")
 ```
 
-
 Power analysis:
 ```{r, echo=FALSE}
 pwr.t.test(d = 0.25, sig.level = 0.05, power = 0.8)$n
 pwr.t.test(d = 0.5, sig.level = 0.05, power = 0.8)$n
 pwr.t.test(d = 0.75, sig.level = 0.05, power = 0.8)$n
 ```
-Analysis is produced for small, medium, and large differences in means. This is useful in determining whether or not the sampling size plan we're using is appropriate to account for Type I error
-
-
+This power analysis is produced for small, medium, and large differences in means. This is useful as a reference in determining whether or not the sampling size plan we're using is large enough to appropriately account for Type II error.
