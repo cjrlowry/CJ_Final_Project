@@ -1,0 +1,295 @@
+---
+title: "Influence of Native Sea Urchins on Biofouling in RI Oyster Farms"
+author: "Christopher Jenkins"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(pwr) # load packages
+library(tidyverse)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+#load data, data must be saved in home workspace, remove N/A gis
+urchins_raw <- read.csv("~/R/urchin_data/urchins_example_data.csv", na.strings = c("N/A", "NA"))  # location should be~/urchin_data/example_dataset/urchin_example_data.csv
+
+#convert non-NA gis to numerics
+urchins_raw[] <- apply(urchins_raw, 2, function(x) {
+  numeric_vals <- as.numeric(x[!is.na(x) & !grepl("[[:alpha:]]", x)])
+  replace(x, !is.na(x) & !grepl("[[:alpha:]]", x), numeric_vals)
+})
+
+#Testing
+urchins_cleaned <- urchins_raw
+#URCHIN DENSITY effect on BIOFOULING
+urchins_cleaned$urchin_density <- factor(urchins_cleaned$urchin_density) #urchin density control variable needs to be a factor
+urchins_cleaned$depth <- factor(urchins_cleaned$depth) #depth control variable needs to be a factor
+model_biofouling <- aov(biofouling_end_rank ~ urchin_density*depth, data = urchins_cleaned) #anova
+#output results
+summary(model_biofouling) #summary, if we see significant results we continue:
+tukey_biofouling <- TukeyHSD(model_biofouling) #post hoc analysis to identify which levels in particular are significant
+#save results
+tukey_summary_biofoul <- as.data.frame(tukey_biofouling$'urchin_density') #specify what results to save
+tukey_summary_biofoul$sig <- ifelse(tukey_summary_biofoul$'p adj' < 0.05, "*", " ") #add additional row that marks significant results
+tukey_summary_depth <- as.data.frame(tukey_biofouling$'depth') #same for depth, check if depth has influence
+tukey_summary_depth$sig <- ifelse(tukey_summary_depth$'p adj' < 0.05, "*", " ") #mark significant figures
+
+#plot biofouling
+plot_biofouling <- ggplot(urchins_cleaned, aes(x = urchin_density, y = biofouling_end_rank)) +
+  geom_violin(fill = "lightblue") + # violin plot
+  stat_summary(fun = median, geom = "point", size = 3, color = "black", shape = 18) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.4) +
+  labs(title = "Urchin_density vs. Biofouling Ranking", x = "Urchin Density", y = "Biofouling Rank") +
+  scale_y_continuous(limits = c(0, max(urchins_cleaned$biofouling_end_rank) + 1)) +
+  theme_classic()
+
+
+#plot depth
+plot_depth <- ggplot(urchins_cleaned, aes(x = depth, y = biofouling_end_rank)) +
+  geom_violin(fill = "lightblue") + # violin plot
+  stat_summary(fun = median, geom = "point", size = 3, color = "black", shape = 18) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.4) +
+  labs(title = "Cage Depth vs. Biofouling Ranking", x = "Cage Depth", y = "Biofouling Rank") +
+  scale_y_continuous(limits = c(0, max(urchins_cleaned$biofouling_end_rank) + 1)) +
+  theme_classic()
+
+#Urchin Density and Mortality
+model_mort <- aov(mortality ~ urchin_density, data = urchins_cleaned) 
+summary(model_mort) 
+tukey_mort <- TukeyHSD(model_mort) 
+tukey_mort <- as.data.frame(tukey_mort$'urchin_density') 
+tukey_mort$sig <- ifelse(tukey_mort$'p adj' < 0.05, "*", " ") 
+
+plot_mort <- ggplot(urchins_cleaned, aes(x = urchin_density, y = mortality)) +
+  geom_violin(fill = "lightblue") + # violin plot
+  stat_summary(fun = median, geom = "point", size = 3, color = "black", shape = 18) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.4) +
+  labs(title = "Urchin Density vs. Urchin Mortalities", x = "Urchin Density", y = "Mortalities") +
+  scale_y_continuous(limits = c(0, max(urchins_cleaned$mortality) + 1)) +
+  theme_classic()
+
+
+
+
+#URCHIN DENSITY effect on URCHIN QUALITY metrics
+#includes GI and change in TD
+#get differences in TD
+# find test diameter starting average
+td_start_cols <- grep("td_start", colnames(urchins_raw))
+td_start_means <- rowMeans(urchins_raw[, td_start_cols], na.rm = TRUE)
+urchins_cleaned$td_start_avg <- td_start_means
+
+# find test diameter ending average
+td_end_cols <- grep("td_end", colnames(urchins_raw))
+td_end_means <- rowMeans(urchins_raw[, td_end_cols], na.rm = TRUE)
+urchins_cleaned$td_end_avg <- td_end_means
+#subtract the two columns
+urchins_cleaned$td_diff <- urchins_cleaned$td_end_avg - urchins_cleaned$td_start_avg
+
+#now get the GI %
+long_urchins <- urchins_cleaned %>% # since the GI% is captured in several columns we need to reorganize the dataset so relevant information is in the same row
+  gather(key = "variable", value = "gi_values", -cage_number, -urchin_density, -biofouling_end_rank, -depth, -mortality, -td_diff)
+long_urchins <- na.omit(long_urchins)
+
+#get all the GI rows with all the TD differences and conduct nested ANOVA
+gi_data <- long_urchins[grep("gi", long_urchins$variable), ] # all rows that contain GI
+#make td_diff a factor for analysis
+gi_data$td_diff <- as.factor(gi_data$td_diff)
+model_gi <- aov(gi_values ~ urchin_density, data = gi_data) #anova between GI% and urchin density
+summary(model_gi) #as before, if we see significant results we move on to Tukey post-hoc
+tukey_gi <- TukeyHSD(model_gi)
+#save data for both GI and TD
+tukey_summary_gi <- as.data.frame(tukey_gi$'urchin_density') #specify what results to save
+tukey_summary_gi$sig <- ifelse(tukey_summary_gi$'p adj' < 0.05, "*", " ") #add additional row that marks significant results
+
+gi_data$td_diff <- as.numeric(gi_data$td_diff)
+model_td <- aov(td_diff ~ urchin_density, data = gi_data)
+summary(model_td)
+tukey_td <- TukeyHSD(model_td)
+tukey_summary_td <- as.data.frame(tukey_td$'urchin_density')
+tukey_summary_td$sig <- ifelse(tukey_summary_td$'p adj' < 0.05, "*", " ")
+
+
+
+
+#plot for GI
+plot_gi <- ggplot(gi_data, aes(x = urchin_density, y = gi_values)) +
+  geom_violin(fill = "lightblue") + # violin plot
+  stat_summary(fun = median, geom = "point", size = 3, color = "black", shape = 18) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.4) +
+  labs(title = "Urchin Density vs. Gonad Index", x = "Urchin Density", y = "Gonad Index (%)") +
+  scale_y_continuous(limits = c(0, max(gi_data$gi_values) + 1)) +
+  theme_classic()
+
+#plot for TD
+gi_data$td_diff <- as.character(gi_data$td_diff)
+gi_data$td_diff <- as.numeric(gi_data$td_diff)
+plot_td <- ggplot(gi_data, aes(x = urchin_density, y = td_diff)) +
+  geom_violin(fill = "lightblue") + # violin plot
+  stat_summary(fun = median, geom = "point", size = 3, color = "black", shape = 18) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.4) +
+  labs(title = "Urchin Density vs. Change in Test Diameter", x = "Urchin Density", y = "Change in Test Diameter (mm)") +
+  scale_y_continuous(limits = c(0, max(gi_data$td_diff) + 1)) +
+  theme_classic()
+
+#URCHIN DENSITY effect on OYSTER QUALITY - change in SL
+# find oyster shell length starting average
+shell_length_start <- grep("shell_length_start", colnames(urchins_raw))
+shell_length_start_means <- rowMeans(urchins_raw[, shell_length_start], na.rm = TRUE)
+urchins_cleaned$shell_length_start_avg <- shell_length_start_means
+# find oyster shell length ending average
+shell_length_end <- grep("shell_length_end", colnames(urchins_raw))
+shell_length_end_means <- rowMeans(urchins_raw[, shell_length_end], na.rm = TRUE)
+urchins_cleaned$shell_length_end_avg <- shell_length_end_means
+#subtract the two columns
+urchins_cleaned$shell_length_diff <- urchins_cleaned$shell_length_end_avg - urchins_cleaned$shell_length_start_avg
+
+#perform anova between differences in SL and urchin density
+urchins_cleaned$biofouling_end_rank <- factor(urchins_cleaned$biofouling_end_rank)
+model_sl <- aov(shell_length_diff ~ urchin_density, data = urchins_cleaned)
+#output results
+summary(model_sl)
+tukey_slu <- TukeyHSD(model_sl)
+#save data for both GI and TD
+tukey_summary_slu <- as.data.frame(tukey_slu$'urchin_density') #specify what results to save
+tukey_summary_slu$sig <- ifelse(tukey_summary_slu$'p adj' < 0.05, "*", " ") #add additional row that marks significant results
+
+#plot of urchin density vs shell length growth
+plot_slu <- ggplot(urchins_cleaned, aes(x = urchin_density, y = shell_length_diff)) +
+  geom_violin(fill = "lightblue") + # violin plot
+  stat_summary(fun = median, geom = "point", size = 3, color = "black", shape = 18) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.4) +
+  labs(title = "Urchin Density vs. Change in Oyster Shell Length", x = "Urchin Density", y = "Change in Oyster Shell Length (mm)") +
+  scale_y_continuous(limits = c(0, max(urchins_cleaned$td_diff) + 1)) +
+  theme_classic()
+
+
+
+#BIOFOULING effect on OYSTER QUALITY
+urchins_cleaned$biofouling_end_rank <- as.factor(urchins_cleaned$biofouling_end_rank)
+model_slb <- aov(shell_length_diff ~ biofouling_end_rank, data = urchins_cleaned)
+#output results
+summary(model_slb)
+tukey_slb <- TukeyHSD(model_slb)
+#save data for both GI and TD
+tukey_summary_slb <- as.data.frame(tukey_slb$'biofouling_end_rank') #specify what results to save
+tukey_summary_slb$sig <- ifelse(tukey_summary_slb$'p adj' < 0.05, "*", " ") #add additional row that marks significant results
+
+plot_slb <- ggplot(urchins_cleaned, aes(x = biofouling_end_rank, y = shell_length_diff)) +
+  geom_violin(fill = "lightblue") + # violin plot
+  stat_summary(fun = median, geom = "point", size = 3, color = "black", shape = 18) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", width = 0.4) +
+  labs(title = "Biofouling Rank vs. Change in Oyster Shell Length", x = "Biofouling Rank", y = "Change in Oyster Shell Length (mm)") +
+  scale_y_continuous(limits = c(0, max(urchins_cleaned$shell_length_diff) + 1)) +
+  theme_classic()
+
+
+```
+
+## Introduction
+
+This analysis requires a dataset in long form, arranged such that treatment cages are in rows and data collected for each row is found in the columns. Data collected includes: mortality, biofouling end rank, test diameter at start of experiment and test diameter at end of experiment, shell length at start of experiment and shell length at end of experiment, and GI%. This dataset assumes GI% calculations have already been performed on the raw data.
+
+In order to prove our assumptions that determine our decision to use an ANOVA test, we can check that our response variables have approximately similar variances using an F-test for equality of variances at P>0.05, where if P>0.05 we can assume the variances are similar.
+```{r, echo=FALSE}
+avg_gi <- aggregate(gi_values ~ cage_number, data = gi_data, FUN = mean) #using average of GI to compare to average test diameter difference
+urchins_cleaned <- merge(urchins_cleaned, avg_gi, by = "cage_number", all.x = TRUE)
+#values must be numerics for variance test
+urchins_cleaned$biofouling_end_rank <- as.numeric(urchins_cleaned$biofouling_end_rank)
+urchins_cleaned$gi_values <- as.numeric(urchins_cleaned$gi_values)
+urchins_cleaned$shell_length_diff <- as.numeric(urchins_cleaned$shell_length_diff)
+#variance tests
+var.test(urchins_cleaned$biofouling_end_rank, urchins_cleaned$shell_length_diff)
+var.test(urchins_cleaned$biofouling_end_rank, urchins_cleaned$gi_values)
+var.test(urchins_cleaned$shell_length_diff, urchins_cleaned$gi_values)
+```
+If variances are unequal, we can use an alternative test method such as Welch's ANOVA or Kruskal-Wallis test.
+
+Additionally, ANOVA assumes that all response variables are independent of one another. This can be tested using a pairwise correlation. We will be using a Kendall coefficient of correlation as the sample size is small and the biofouling is ordinal in nature. Below are the results between biofouling rank and oyster shell growth rate:
+```{r, echo=FALSE}
+#insert pairwise correlation here with cor() function
+urchins_cleaned$biofouling_end_rank <- as.numeric(urchins_cleaned$biofouling_end_rank)
+cor(urchins_cleaned$biofouling_end_rank, urchins_cleaned$shell_length_diff, method = c("kendall"))
+```
+
+Same test on GI% and test diameter growth rate:
+```{r, echo=FALSE}
+#changes required so that the correlation test can work due to N/A and NaN values when urchin density = 0
+cor_test <- subset(urchins_cleaned, select = c("gi_values", "td_diff"))
+cor_test <- na.omit(cor_test)
+cor(cor_test$td_diff, cor_test$gi_values, method = c("kendall"))
+```
+
+Same test on GI% and biofouling rank
+```{r, echo=FALSE}
+cor_test2 <- subset(urchins_cleaned, select = c("gi_values", "biofouling_end_rank"))
+cor_test2 <- na.omit(cor_test2)
+cor(cor_test2$biofouling_end_rank, cor_test2$gi_values, method = c("kendall"))
+```
+
+
+
+If correlations are found, this can be used to reinforce our understanding of how urchin presence/density influences oyster quality and urchin quality. We can focus on more specific variables with stronger effects. Non-correlation means ANOVAs should be performed on all variables.
+
+Here we can view the analysis of our data using one-way ANOVAs.
+Influence of urchin density on biofouling rankings:
+```{r, echo=FALSE}
+plot(plot_biofouling)
+knitr::kable(tukey_summary_biofoul, format = "markdown")
+```
+
+Influence of urchin density on mortality rate:
+```{r, echo=FALSE}
+plot(plot_mort)
+knitr::kable(tukey_mort, format = "markdown")
+```
+
+
+
+Influence of cage depth on biofouling ranking
+```{r, echo=FALSE}
+plot(plot_depth)
+knitr::kable(tukey_summary_depth, format = "markdown")
+```
+This test is particularly important. Since there is no influence of cage depth on biofouling ranking we can safely assume that all the cages are functionally replicates of one another between depths (for a given urchin density); if we do see differences in biofouling ranking this would be a flag that we should perform a deeper analysis between urchin density AND depth on the response variables using an ANCOVA test (Analysis of Covariance) using the lm() function
+
+
+Influence of urchin density on urchin quality metric test diameter:
+```{r, echo=FALSE}
+plot(plot_td)
+knitr::kable(tukey_summary_td, format = "markdown")
+```
+
+Influence of urchin density on quality metric Gonad Index (%):
+```{r, echo=FALSE}
+plot(plot_gi)
+knitr::kable(tukey_summary_gi, format = "markdown")
+```
+
+Influence of urchin density on the oyster quality metric shell length:
+```{r, echo=FALSE}
+plot(plot_slu)
+knitr::kable(tukey_summary_slu, format = "markdown")
+```
+
+Influence of biofouling on the oyster quality metric shell length:
+```{r, echo=FALSE}
+plot(plot_slb)
+knitr::kable(tukey_summary_slb, format = "markdown")
+```
+
+
+Power analysis:
+```{r, echo=FALSE}
+pwr.t.test(d = 0.25, sig.level = 0.05, power = 0.8)$n
+pwr.t.test(d = 0.5, sig.level = 0.05, power = 0.8)$n
+pwr.t.test(d = 0.75, sig.level = 0.05, power = 0.8)$n
+```
+Analysis is produced for small, medium, and large differences in means. This is useful in determining whether or not the sampling size plan we're using is appropriate to account for Type I error
+
+
